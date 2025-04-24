@@ -1,0 +1,547 @@
+OpenAI 图像生成器
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OpenAI 图像生成器</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            line-height: 1.6;
+            margin: 20px;
+            background-color: #f4f4f4;
+        }
+        .container {
+            max-width: 800px;
+            margin: auto;
+            background: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1, h2 {
+            color: #333;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+            color: #555;
+        }
+        input[type="text"],
+        input[type="number"],
+        select,
+        textarea {
+            width: calc(100% - 22px);
+            padding: 10px;
+            margin-bottom: 15px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            box-sizing: border-box; /* Include padding and border in element's total width */
+        }
+        textarea {
+            height: 100px;
+            resize: vertical;
+        }
+        button {
+            background-color: #007bff;
+            color: white;
+            padding: 12px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background-color 0.3s ease;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        button:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+        #preview {
+            margin-top: 20px;
+            border-top: 1px solid #eee;
+            padding-top: 20px;
+        }
+        #preview img {
+            max-width: 100%;
+            height: auto;
+            display: block;
+            margin-top: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        .error {
+            color: red;
+            margin-top: 10px;
+            font-weight: bold;
+        }
+        .form-group {
+            margin-bottom: 15px;
+            padding: 10px;
+            border: 1px solid #eee;
+            border-radius: 5px;
+            background-color: #f9f9f9;
+        }
+        .form-group legend {
+            font-weight: bold;
+            color: #333;
+            padding: 0 5px;
+        }
+        .hidden {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>OpenAI 图像生成器</h1>
+
+    <div class="form-group">
+        <legend>认证</legend>
+        <label for="apiKey">OpenAI API Key:</label>
+        <input type="password" id="apiKey" placeholder="输入你的 OpenAI API Key">
+        <small>API Key 将保存在你的浏览器本地存储中。</small>
+    </div>
+
+    <form id="imageForm">
+        <div class="form-group">
+            <legend>核心参数</legend>
+            <label for="prompt">提示 (Prompt):</label>
+            <textarea id="prompt" name="prompt" required placeholder="例如：一只可爱的小海獭"></textarea>
+
+            <label for="model">模型 (Model):</label>
+            <select id="model" name="model">
+                <option value="gpt-image-1" selected>gpt-image-1</option>
+                <option value="dall-e-3">dall-e-3</option>
+                <option value="dall-e-2">dall-e-2</option>
+            </select>
+        </div>
+
+        <div class="form-group">
+            <legend>通用选项</legend>
+            <label for="n">生成数量 (n):</label>
+            <input type="number" id="n" name="n" value="1" min="1" max="10">
+            <small id="n-note">对于 dall-e-3, n 必须为 1。</small>
+
+            <label for="size">尺寸 (Size):</label>
+            <select id="size" name="size">
+                <!-- Options will be populated by JS -->
+            </select>
+
+            <label for="quality">质量 (Quality):</label>
+            <select id="quality" name="quality">
+                <!-- Options will be populated by JS -->
+            </select>
+             <small id="quality-note"></small>
+
+            <label for="user">用户标识 (User - 可选):</label>
+            <input type="text" id="user" name="user" placeholder="可选的唯一用户标识符">
+        </div>
+
+        <div class="form-group gpt-image-1-options">
+            <legend>gpt-image-1 专属选项</legend>
+            <label for="background">背景 (Background):</label>
+            <select id="background" name="background">
+                <option value="auto" selected>自动 (auto)</option>
+                <option value="transparent">透明 (transparent)</option>
+                <option value="opaque">不透明 (opaque)</option>
+            </select>
+             <small>透明背景需要输出格式为 png 或 webp。</small>
+
+            <label for="moderation">内容审核 (Moderation):</label>
+            <select id="moderation" name="moderation">
+                <option value="auto" selected>自动 (auto)</option>
+                <option value="low">低 (low)</option>
+            </select>
+
+            <label for="output_compression">输出压缩 (Output Compression):</label>
+            <input type="number" id="output_compression" name="output_compression" value="100" min="0" max="100">
+             <small>仅适用于 webp 或 jpeg 格式。</small>
+
+            <label for="output_format">输出格式 (Output Format):</label>
+            <select id="output_format" name="output_format">
+                <option value="png" selected>png</option>
+                <option value="jpeg">jpeg</option>
+                <option value="webp">webp</option>
+            </select>
+        </div>
+
+        <div class="form-group dall-e-options">
+             <legend>DALL·E 专属选项</legend>
+            <label for="response_format">响应格式 (Response Format):</label>
+            <select id="response_format" name="response_format">
+                <option value="url" selected>URL</option>
+                <option value="b64_json">b64_json</option>
+            </select>
+             <small>URL 在生成 60 分钟后失效。gpt-image-1 始终返回 b64_json。</small>
+        </div>
+
+        <div class="form-group dall-e-3-options">
+            <legend>DALL·E 3 专属选项</legend>
+            <label for="style">风格 (Style):</label>
+            <select id="style" name="style">
+                <option value="vivid" selected>生动 (vivid)</option>
+                <option value="natural">自然 (natural)</option>
+            </select>
+        </div>
+
+
+        <button type="submit" id="generateBtn">生成图像</button>
+    </form>
+
+    <div id="loading" class="hidden" style="text-align: center; margin-top: 20px;">
+        <p>正在生成图像，请稍候...</p>
+        <div class="spinner" style="border: 4px solid rgba(0,0,0,.1); width: 36px; height: 36px; border-radius: 50%; border-left-color: #09f; animation: spin 1s ease infinite; margin: auto;"></div>
+        <style>@keyframes spin { to { transform: rotate(360deg); } }</style>
+    </div>
+    <div id="preview">
+        <h2>预览</h2>
+        <div id="imageContainer"></div>
+        <div id="errorContainer" class="error"></div>
+        <div id="usageContainer" style="margin-top: 15px; font-size: 0.9em; color: #666;"></div>
+    </div>
+</div>
+
+<script>
+    const apiKeyInput = document.getElementById('apiKey');
+    const imageForm = document.getElementById('imageForm');
+    const modelSelect = document.getElementById('model');
+    const nInput = document.getElementById('n');
+    const nNote = document.getElementById('n-note');
+    const sizeSelect = document.getElementById('size');
+    const qualitySelect = document.getElementById('quality');
+    const qualityNote = document.getElementById('quality-note');
+    const backgroundSelect = document.getElementById('background');
+    const moderationSelect = document.getElementById('moderation');
+    const outputCompressionInput = document.getElementById('output_compression');
+    const outputFormatSelect = document.getElementById('output_format');
+    const responseFormatSelect = document.getElementById('response_format');
+    const styleSelect = document.getElementById('style');
+    const generateBtn = document.getElementById('generateBtn');
+    const previewDiv = document.getElementById('preview');
+    const imageContainer = document.getElementById('imageContainer');
+    const errorContainer = document.getElementById('errorContainer');
+    const usageContainer = document.getElementById('usageContainer');
+    const loadingDiv = document.getElementById('loading');
+
+    const gptImage1OptionsDiv = document.querySelector('.gpt-image-1-options');
+    const dalleOptionsDiv = document.querySelector('.dall-e-options');
+    const dalle3OptionsDiv = document.querySelector('.dall-e-3-options');
+
+    // API Endpoint
+    const API_URL = 'https://api.openai.com/v1/images/generations';
+
+    // Model specific options
+    const modelOptions = {
+        'gpt-image-1': {
+            sizes: ['auto', '1024x1024', '1536x1024', '1024x1536'],
+            qualities: ['auto', 'high', 'medium', 'low'],
+            nMax: 10,
+            supportsBackground: true,
+            supportsModeration: true,
+            supportsOutputCompression: true,
+            supportsOutputFormat: true,
+            supportsResponseFormat: false,
+            supportsStyle: false,
+            defaultResponseFormat: 'b64_json' // Implicit
+        },
+        'dall-e-3': {
+            sizes: ['1024x1024', '1792x1024', '1024x1792'],
+            qualities: ['standard', 'hd'],
+            nMax: 1,
+            supportsBackground: false,
+            supportsModeration: false,
+            supportsOutputCompression: false,
+            supportsOutputFormat: false,
+            supportsResponseFormat: true,
+            supportsStyle: true
+        },
+        'dall-e-2': {
+            sizes: ['256x256', '512x512', '1024x1024'],
+            qualities: ['standard'],
+            nMax: 10,
+            supportsBackground: false,
+            supportsModeration: false,
+            supportsOutputCompression: false,
+            supportsOutputFormat: false,
+            supportsResponseFormat: true,
+            supportsStyle: false
+        }
+    };
+
+    // Load API Key from localStorage
+    apiKeyInput.value = localStorage.getItem('openai_api_key') || '';
+
+    // Save API Key to localStorage
+    apiKeyInput.addEventListener('input', () => {
+        localStorage.setItem('openai_api_key', apiKeyInput.value);
+    });
+
+    // Function to update form based on selected model
+    function updateFormForModel(selectedModel) {
+        const options = modelOptions[selectedModel];
+
+        // Update Size options
+        sizeSelect.innerHTML = '';
+        options.sizes.forEach(size => {
+            const option = document.createElement('option');
+            option.value = size;
+            option.textContent = size === 'auto' ? '自动 (auto)' : size;
+            sizeSelect.appendChild(option);
+        });
+         // Set default for gpt-image-1
+        if (selectedModel === 'gpt-image-1') {
+            sizeSelect.value = 'auto';
+        } else {
+            sizeSelect.value = options.sizes[0]; // Default to first available size otherwise
+        }
+
+
+        // Update Quality options
+        qualitySelect.innerHTML = '';
+        options.qualities.forEach(quality => {
+            const option = document.createElement('option');
+            option.value = quality;
+            option.textContent = quality;
+            qualitySelect.appendChild(option);
+        });
+        qualitySelect.disabled = options.qualities.length === 1;
+         // Set default for gpt-image-1
+        if (selectedModel === 'gpt-image-1') {
+            qualitySelect.value = 'auto';
+            qualityNote.textContent = 'auto 会自动选择最佳质量。';
+        } else if (selectedModel === 'dall-e-3') {
+            qualitySelect.value = 'standard'; // Default for DALL-E 3
+            qualityNote.textContent = 'hd 提供更高细节，standard 提供更快生成速度。';
+        } else {
+            qualitySelect.value = 'standard';
+            qualityNote.textContent = 'dall-e-2 仅支持 standard。';
+        }
+
+
+        // Update N input constraints
+        nInput.max = options.nMax;
+        if (options.nMax === 1) {
+            nInput.value = 1;
+            nInput.disabled = true;
+            nNote.style.display = 'block';
+        } else {
+            // Restore previous value if possible, otherwise default to 1
+             if (parseInt(nInput.value) > options.nMax) {
+                 nInput.value = 1;
+             } else if (parseInt(nInput.value) < 1) {
+                 nInput.value = 1;
+             }
+            nInput.disabled = false;
+            nNote.style.display = 'none';
+        }
+
+        // Toggle visibility/disabled state of specific option groups/fields
+        gptImage1OptionsDiv.classList.toggle('hidden', !options.supportsBackground); // Use one representative field
+        dalleOptionsDiv.classList.toggle('hidden', !options.supportsResponseFormat);
+        dalle3OptionsDiv.classList.toggle('hidden', !options.supportsStyle);
+
+        // Individual field enable/disable (redundant if parent is hidden, but good practice)
+        backgroundSelect.disabled = !options.supportsBackground;
+        moderationSelect.disabled = !options.supportsModeration;
+        outputCompressionInput.disabled = !options.supportsOutputCompression;
+        outputFormatSelect.disabled = !options.supportsOutputFormat;
+        responseFormatSelect.disabled = !options.supportsResponseFormat;
+        styleSelect.disabled = !options.supportsStyle;
+
+         // Ensure response format defaults correctly if DALL-E selected
+        if(options.supportsResponseFormat) {
+             if(!responseFormatSelect.value) responseFormatSelect.value = 'url';
+        }
+        // Ensure style defaults correctly if DALL-E 3 selected
+        if(options.supportsStyle) {
+             if(!styleSelect.value) styleSelect.value = 'vivid';
+        }
+         // Ensure gpt-image-1 specific defaults
+        if(selectedModel === 'gpt-image-1') {
+            if(!backgroundSelect.value) backgroundSelect.value = 'auto';
+            if(!moderationSelect.value) moderationSelect.value = 'auto';
+            if(!outputFormatSelect.value) outputFormatSelect.value = 'png';
+            if(!outputCompressionInput.value) outputCompressionInput.value = '100';
+        }
+
+    }
+
+    // Initial form setup on page load
+    updateFormForModel(modelSelect.value);
+
+    // Update form when model changes
+    modelSelect.addEventListener('change', (e) => {
+        updateFormForModel(e.target.value);
+    });
+
+    // Handle form submission
+    imageForm.addEventListener('submit', async (e) => {
+        e.preventDefault(); // Prevent default form submission
+
+        const apiKey = apiKeyInput.value.trim();
+        if (!apiKey) {
+            errorContainer.textContent = '错误：请输入 OpenAI API Key。';
+            previewDiv.scrollIntoView({ behavior: 'smooth' });
+            return;
+        }
+
+        const formData = new FormData(imageForm);
+        const data = {};
+        const selectedModel = modelSelect.value;
+        const modelConfig = modelOptions[selectedModel];
+
+        // Build request body based on selected model and its supported options
+        data.prompt = formData.get('prompt');
+        data.model = selectedModel;
+
+        const nVal = parseInt(formData.get('n'));
+        if (nVal > 0 && nVal <= modelConfig.nMax) {
+             data.n = nVal;
+        } else {
+             data.n = selectedModel === 'dall-e-3' ? 1 : 1; // Default to 1 if invalid
+        }
+
+
+        const sizeVal = formData.get('size');
+        if (sizeVal && modelConfig.sizes.includes(sizeVal)) {
+            data.size = sizeVal;
+        } else if (selectedModel === 'gpt-image-1') {
+            data.size = 'auto'; // Default for gpt-image-1
+        } else if (selectedModel === 'dall-e-3') {
+             data.size = '1024x1024'; // Default for DALL-E 3
+        } else { // dall-e-2
+             data.size = '1024x1024'; // Default for DALL-E 2
+        }
+
+
+        const qualityVal = formData.get('quality');
+         if (qualityVal && modelConfig.qualities.includes(qualityVal)) {
+             // Only include quality if it's not the default 'standard' for DALL-E 2/3 or 'auto' for gpt-image-1 unless explicitly set otherwise
+             if (!((selectedModel === 'dall-e-2' || selectedModel === 'dall-e-3') && qualityVal === 'standard' && modelConfig.qualities.length > 1) &&
+                 !(selectedModel === 'gpt-image-1' && qualityVal === 'auto')) {
+                 data.quality = qualityVal;
+             } else if (selectedModel === 'gpt-image-1' && qualityVal !== 'auto') {
+                 data.quality = qualityVal; // include if not auto for gpt-image-1
+             } else if (selectedModel === 'dall-e-3' && qualityVal === 'hd') {
+                 data.quality = qualityVal; // include if hd for dall-e-3
+             }
+         }
+
+
+        if (formData.get('user')) {
+            data.user = formData.get('user');
+        }
+
+        // Model-specific options
+        if (selectedModel === 'gpt-image-1') {
+            const backgroundVal = formData.get('background');
+            if (backgroundVal !== 'auto') data.background = backgroundVal;
+
+            const moderationVal = formData.get('moderation');
+            if (moderationVal !== 'auto') data.moderation = moderationVal;
+
+            const outputFormatVal = formData.get('output_format');
+             if (outputFormatVal !== 'png') data.output_format = outputFormatVal; // Only include if not default
+
+             const outputCompressionVal = parseInt(formData.get('output_compression'));
+             if (outputCompressionVal !== 100 && (outputFormatVal === 'webp' || outputFormatVal === 'jpeg')) {
+                 data.output_compression = outputCompressionVal; // Only include if not default and format supports it
+             }
+
+        } else if (selectedModel === 'dall-e-3') {
+             const styleVal = formData.get('style');
+             if (styleVal !== 'vivid') data.style = styleVal; // Only include if not default
+
+             const responseFormatVal = formData.get('response_format');
+             if (responseFormatVal !== 'url') data.response_format = responseFormatVal; // Only include if not default
+
+        } else { // dall-e-2
+             const responseFormatVal = formData.get('response_format');
+             if (responseFormatVal !== 'url') data.response_format = responseFormatVal; // Only include if not default
+        }
+
+
+        // Clear previous results and show loading
+        imageContainer.innerHTML = '';
+        errorContainer.textContent = '';
+        usageContainer.textContent = '';
+        loadingDiv.classList.remove('hidden');
+        generateBtn.disabled = true;
+        previewDiv.scrollIntoView({ behavior: 'smooth' });
+
+        try {
+            const response = await fetch(API_URL, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${apiKey}`
+                },
+                body: JSON.stringify(data)
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(`API Error (${response.status}): ${errorData.error?.message || response.statusText}`);
+            }
+
+            const result = await response.json();
+
+            // Display images
+            if (result.data && result.data.length > 0) {
+                result.data.forEach(item => {
+                    const img = document.createElement('img');
+                    if (item.url) {
+                        img.src = item.url;
+                        img.alt = data.prompt;
+                    } else if (item.b64_json) {
+                        img.src = `data:image/png;base64,${item.b64_json}`; // Assume png if format not specified, though gpt-image-1 returns format info
+                        img.alt = data.prompt;
+                    }
+                    imageContainer.appendChild(img);
+                });
+            } else {
+                 errorContainer.textContent = 'API 返回成功，但未包含图像数据。';
+            }
+
+            // Display usage if available
+            if (result.usage) {
+                 usageContainer.textContent = `使用量: 总 tokens: ${result.usage.total_tokens}, 输入 tokens: ${result.usage.input_tokens}, 输出 tokens: ${result.usage.output_tokens}`;
+                 if (result.usage.input_tokens_details) {
+                     usageContainer.textContent += ` (文本: ${result.usage.input_tokens_details.text_tokens}, 图像: ${result.usage.input_tokens_details.image_tokens})`;
+                 }
+            }
+
+        } catch (error) {
+            console.error('生成图像时出错:', error);
+            errorContainer.textContent = `生成图像时出错: ${error.message}`;
+        } finally {
+            loadingDiv.classList.add('hidden');
+            generateBtn.disabled = false;
+        }
+    });
+
+</script>
+
+</body>
+</html>
+```
+
+**如何使用:**
+
+1.  **保存代码:** 将上面的 HTML 代码保存到一个文件中，例如 `image_generator.html`。
+2.  **打开页面:** 用你的网页浏览器打开这个 HTML 文件。
+3.  **输入 API Key:** 在 "OpenAI API Key" 输入框中粘贴你的密钥。这个密钥会自动保存在你的浏览器本地，下次打开页面时无需重新输入（注意：这只在你自己的计算机上安全，不要在公共计算机上这样做）。
+4.  **填写参数:**
+    *   **提示 (Prompt):** 输入你想要生成的图像的描述。
+    *   **模型 (Model):** 选择你想要使用的模型 (`gpt-image-1`, `dall-e-3`, 或 `dall-e-2`)。页面会根据你的选择自动调整可用的选项。
+    *   **调整其他选项:** 根据需要配置尺寸、数量、质量以及模型特定的选项（如背景、风格等）。不可用或不相关的选项会自动隐藏或禁用。
+5.  **生成图像:** 点击 "生成图像" 按钮。
+6.  **查看结果:** 页面会滚动到预览区域，显示加载指示器。生成成功后，图像会显示在 "预览" 部分。如果出现错误，错误信息也会显示出来。如果 API 返回了使用量信息，也会一并显示。
+
+这个页面实现了你要求的所有功能，并根据所选模型动态调整了表单选项，使其更易于使用。

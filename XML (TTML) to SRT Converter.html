@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>XML to SRT Converter (Web)</title>
+    <style>
+        body { font-family: sans-serif; margin: 20px; background-color: #f4f4f4; color: #333; }
+        .container { background-color: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
+        h1 { color: #333; }
+        label { display: block; margin-bottom: 8px; font-weight: bold; }
+        input[type="file"] { margin-bottom: 15px; padding: 8px; border: 1px solid #ddd; border-radius: 4px; }
+        button {
+            background-color: #007bff; color: white; padding: 10px 15px;
+            border: none; border-radius: 4px; cursor: pointer; font-size: 16px;
+        }
+        button:hover { background-color: #0056b3; }
+        #output { margin-top: 20px; padding: 10px; border: 1px solid #eee; background-color: #f9f9f9; border-radius: 4px; }
+        .message { padding: 5px 0; }
+        .error { color: red; }
+        .success { color: green; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>XML (TTML) to SRT Converter</h1>
+        <label for="xmlFiles">Select XML subtitle file(s):</label>
+        <input type="file" id="xmlFiles" accept=".xml, .ttml" multiple>
+        <button id="convertButton">Convert to SRT</button>
+        <div id="output">
+            <p>Status messages will appear here.</p>
+        </div>
+    </div>
+
+    <script>
+        const xmlFilesInput = document.getElementById('xmlFiles');
+        const convertButton = document.getElementById('convertButton');
+        const outputDiv = document.getElementById('output');
+        const TTML_NAMESPACE = 'http://www.w3.org/ns/ttml';
+
+        convertButton.addEventListener('click', handleConversion);
+        // Or convert automatically on file selection:
+        // xmlFilesInput.addEventListener('change', handleConversion);
+
+
+        function handleConversion() {
+            const files = xmlFilesInput.files;
+            outputDiv.innerHTML = ''; // Clear previous messages
+
+            if (files.length === 0) {
+                addMessage("Please select at least one XML file.", "error");
+                return;
+            }
+
+            Array.from(files).forEach(file => {
+                if (!file.name.toLowerCase().endsWith('.xml') && !file.name.toLowerCase().endsWith('.ttml')) {
+                    addMessage(`Skipping non-XML file: ${file.name}`, "error");
+                    return;
+                }
+                processFile(file);
+            });
+        }
+
+        function processFile(file) {
+            const reader = new FileReader();
+
+            reader.onload = function(event) {
+                const xmlContent = event.target.result;
+                try {
+                    const srtContent = xmlToSrt(xmlContent, file.name);
+                    if (srtContent) {
+                        const srtFileName = file.name.replace(/\.[^/.]+$/, "") + ".srt";
+                        downloadSrt(srtContent, srtFileName);
+                        addMessage(`Successfully converted ${file.name} to ${srtFileName} and initiated download.`, "success");
+                    }
+                } catch (e) {
+                    addMessage(`Error processing ${file.name}: ${e.message}`, "error");
+                    console.error("Error details for", file.name, e);
+                }
+            };
+
+            reader.onerror = function() {
+                addMessage(`Error reading file ${file.name}.`, "error");
+            };
+
+            reader.readAsText(file);
+        }
+
+        function xmlToSrt(xmlString, originalFileName) {
+            const parser = new DOMParser();
+            const xmlDoc = parser.parseFromString(xmlString, "application/xml");
+
+            // Check for parsing errors (important!)
+            const parserError = xmlDoc.getElementsByTagName("parsererror");
+            if (parserError.length > 0) {
+                console.error("Parser Error:", parserError[0].textContent);
+                throw new Error(`Failed to parse XML in ${originalFileName}. Check console for details.`);
+            }
+
+            // Try to find <p> elements within the TTML namespace
+            // The Python script uses root.findall('.//tt:p', ns), meaning elements are namespaced.
+            // If the XML uses a default namespace (xmlns="http://www.w3.org/ns/ttml") on the root,
+            // then getElementsByTagNameNS should be used.
+            // If elements are like <tt:p>, then prefix 'tt' must be resolved.
+            // For simplicity, assuming <p> elements are directly under the TTML namespace.
+            const paragraphs = xmlDoc.getElementsByTagNameNS(TTML_NAMESPACE, 'p');
+            // Fallback if no TTML namespace specific <p> found, try generic <p> (less likely for TTML)
+            // const paragraphs = xmlDoc.getElementsByTagName('p');
+
+
+            if (paragraphs.length === 0) {
+                 // Attempt to find <p> tags without explicit namespace, in case the XML structure is simpler
+                 // or the namespace handling above missed something specific to the input file.
+                const genericParagraphs = xmlDoc.getElementsByTagName('p');
+                if (genericParagraphs.length === 0) {
+                    addMessage(`No subtitle paragraphs (<p> tags in TTML namespace or generic) found in ${originalFileName}.`, "error");
+                    return null;
+                }
+                // If generic paragraphs are found, use them (this is a fallback)
+                // paragraphs = genericParagraphs; // This would require re-scoping `paragraphs` or handling differently
+                // For now, just log it and assume TTML namespace should have worked.
+                addMessage(`Warning: No <p> tags found in TTML namespace for ${originalFileName}. Trying generic <p> tags, but this might not be correct. Found ${genericParagraphs.length}.`, "error");
+                // To actually use genericParagraphs, you'd need to re-assign or pass them.
+                // For this example, let's stick to the assumption that TTML namespace is key.
+                // If you need to support non-namespaced <p>, the logic below needs to use `genericParagraphs`.
+                // The current Python script IS namespace aware.
+                if (xmlDoc.documentElement.namespaceURI !== TTML_NAMESPACE && xmlDoc.getElementsByTagName('p').length > 0) {
+                    addMessage(`Note: The root element of ${originalFileName} does not declare the TTML namespace, but <p> tags were found. Processing these.`, "success");
+                     // Re-query for paragraphs if the above check passes, this time without namespace constraint.
+                     // This is a common case if the XML has <p> but no xmlns="http://www.w3.org/ns/ttml"
+                     const pElements = Array.from(xmlDoc.getElementsByTagName('p'));
+                     return convertParagraphsToSrt(pElements, originalFileName);
+                } else if (paragraphs.length === 0) { // Double check if the previous namespace query failed
+                    addMessage(`No <p> elements (neither TTML namespaced nor generic) found in ${originalFileName}.`, "error");
+                    return null;
+                }
+
+            }
+
+            const pElements = Array.from(paragraphs);
+            return convertParagraphsToSrt(pElements, originalFileName);
+        }
+
+        function convertParagraphsToSrt(pElements, originalFileName) {
+            let srtEntries = [];
+            let counter = 1;
+
+            pElements.forEach(p => {
+                const begin = p.getAttribute('begin');
+                const end = p.getAttribute('end');
+                
+                // Get all text content, including from children. This simplifies Python's iter()
+                let text = p.textContent || ""; 
+                text = text.replace(/\s+/g, ' ').trim(); // Replace multiple spaces/newlines with a single space and trim
+
+                if (text && begin && end) {
+                    srtEntries.push(
+                        `${counter}\n` +
+                        `${convertTimeFormat(begin)} --> ${convertTimeFormat(end)}\n` +
+                        `${text}\n\n`
+                    );
+                    counter++;
+                } else if (!text && begin && end) {
+                    // Optionally, include empty entries if they have timecodes
+                    // console.warn(`Empty text for time ${begin}-${end} in ${originalFileName}`);
+                } else if (!begin || !end) {
+                    console.warn(`Missing timecodes for paragraph in ${originalFileName}: Text was "${text}"`);
+                }
+            });
+
+            if (srtEntries.length === 0) {
+                addMessage(`No valid subtitle entries extracted from ${originalFileName}.`, "error");
+                return null;
+            }
+
+            return srtEntries.join('');
+        }
+
+
+        function convertTimeFormat(timeStr) {
+            // HH:MM:SS.mmm or HH:MM:SS:fff (frames, less common in TTML, but good to be aware)
+            // SRT needs HH:MM:SS,mmm
+            return timeStr.replace('.', ',');
+            // If timeStr might use colons for frames (e.g., 00:00:00:00), more complex logic is needed.
+            // Assuming TTML standard time like 00:00:05.250
+        }
+
+        function downloadSrt(content, fileName) {
+            const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = fileName;
+            document.body.appendChild(a); // Required for Firefox
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+
+        function addMessage(message, type = "info") { // type can be "info", "success", "error"
+            const p = document.createElement('p');
+            p.textContent = message;
+            p.className = "message " + type;
+            outputDiv.appendChild(p);
+             // Scroll to the bottom of the output div
+            outputDiv.scrollTop = outputDiv.scrollHeight;
+        }
+
+    </script>
+</body>
+</html>
